@@ -235,15 +235,16 @@ For example:
 git switch Yuyao_Lei_Project2
 git add R_airquality_SCD.Rproj data/ project2.Rmd README.md
 git commit -m "Set up project and implement air quality data processing"
-git push
+git push -u origin Yuyao_Lei_Project2
 ```
 
 **Second commit: EDA and report completion**
 
 ```bash
+git switch Yuyao_Lei_Project2
 git add project2.Rmd README.md
 git commit -m "Complete descriptive statistics and exploratory data analysis"
-git push
+git push -u origin Yuyao_Lei_Project2
 ```
 
 The repository contains the source data, analysis code, and project documentation required to reproduce the analysis.
