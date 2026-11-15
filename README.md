@@ -57,10 +57,10 @@ The original ozone measurements are assumed to be recorded in ppm. The processin
 
 ## 3. Repository Structure
 
-The repository is organized as follows:
+The repository (URL: https://github.com/leiyuyao05-oss/BIOSTAT721.git) is organized as follows:
 
 ```text
-Yuyao_Lei_Project2/
+Yuyao_Lei_Project2(branch)
 │
 ├── R_airquality_SCD.Rproj
 │
@@ -242,7 +242,7 @@ git push -u origin Yuyao_Lei_Project2
 
 ```bash
 git switch Yuyao_Lei_Project2
-git add project2.Rmd README.md
+git add project2.Rmd README.md project2.docx
 git commit -m "Complete descriptive statistics and exploratory data analysis"
 git push -u origin Yuyao_Lei_Project2
 ```

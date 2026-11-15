@@ -33,6 +33,10 @@ theme_set(
 month_levels <- month.abb
 ```
 
+# 0. GITHUB repo
+
+This project assignment has been uploaded to the Yuyao_Lei_Project2 branch of the GitHub repository (URL: https://github.com/leiyuyao05-oss/BIOSTAT721.git).
+
 # 1. Background and Objectives
 
 Sickle cell disease (SCD) is a group of inherited disorders characterized by abnormally shaped red blood cells. These cells can cause anemia, pain, infection, and serious complications such as stroke by obstructing blood flow.
