@@ -1,0 +1,839 @@
+---
+title: "Project2"
+author: "Yuyao_Lei"
+date: "2026-11-03"
+output: 
+  word_document: 
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  error = FALSE,
+  fig.width = 9,
+  fig.height = 5.5,
+  out.width = "95%"
+)
+
+# Load required packages.
+library(tidyverse)
+library(lubridate)
+library(knitr)
+library(scales)
+
+# Set a consistent theme for all plots.
+theme_set(
+  theme_minimal(base_size = 12)
+)
+
+# Set the order of calendar months.
+month_levels <- month.abb
+```
+
+# 1. Background and Objectives
+
+Sickle cell disease (SCD) is a group of inherited disorders characterized by abnormally shaped red blood cells. These cells can cause anemia, pain, infection, and serious complications such as stroke by obstructing blood flow.
+
+Previous evidence suggests that exposure to air pollution may aggravate vaso-occlusion and pain among individuals with SCD. Understanding the temporal patterns of air pollution exposure may therefore help provide context for future investigations of environmental factors associated with SCD-related healthcare utilization.
+
+The objective of this project is to process daily air quality measurements collected from the Environmental Protection Agency (EPA) monitoring station at Raleigh-Durham International Airport (RDU) in North Carolina and conduct exploratory data analysis (EDA).
+
+Three pollutants are considered:
+
+- Carbon monoxide (CO), measured in parts per million (ppm).
+- Fine particulate matter (PM2.5), measured in micrograms per cubic meter (µg/m³).
+- Ozone (O3), measured in parts per million (ppm).
+
+The analysis covers 2018, 2019, and 2020. The 2020 dataset contains observations only through April.
+
+The specific objectives are to:
+
+1. Develop a reusable R function to clean and process daily air quality measurements.
+2. Combine the processed data from all three years.
+3. Summarize the minimum and maximum daily concentrations of each pollutant by year.
+4. Explore monthly patterns in CO, O3, and PM2.5 using graphical methods.
+
+This project focuses on air quality data processing and exploratory analysis. It does not estimate causal effects or directly evaluate associations between air pollution and SCD-related healthcare utilization.
+
+# 2. Data Description
+
+## 2.1 Data Source
+
+Air quality measurements were obtained from the U.S. Environmental Protection Agency (EPA) for the monitoring station at Raleigh-Durham International Airport (RDU), North Carolina.
+
+The original datasets contain daily air quality measurements for three calendar years:
+
+- 2018: January through December.
+- 2019: January through December.
+- 2020: January through April.
+
+The raw CSV files contain date information, pollutant concentrations, and corresponding measurement units.
+
+## 2.2 Variables
+
+The following variables are used in this analysis:
+
+| Original variable | Processed variable | Description | Unit |
+|---|---|---|---|
+| Date | date | Measurement date | Date |
+| Daily Max 8-hour CO Concentration | co | Daily maximum 8-hour CO concentration | ppm |
+| Daily Mean PM2.5 Concentration | pm25 | Daily mean PM2.5 concentration | µg/m³ |
+| Daily Max 8-hour Ozone Concentration | o3 | Daily maximum 8-hour ozone concentration | ppm or ppb |
+
+The pollutant concentration variables are renamed to shorter, more informative names to facilitate subsequent data manipulation and visualization.
+
+## 2.3 Data Import
+
+The three CSV files are stored in the `data/` directory of the R project.
+
+```{r data_import}
+# import data
+file_2018 <- "data/AQ_2018.csv"
+file_2019 <- "data/AQ_2019.csv"
+file_2020 <- "data/AQ_2020.csv"
+
+# Check whether all input files exist.
+input_files <- c(
+  file_2018,
+  file_2019,
+  file_2020
+)
+
+if (!all(file.exists(input_files))) {
+  stop(
+    "One or more input files cannot be found. ",
+    "Please check the file paths and working directory."
+  )}
+```
+
+# 3. Data Processing
+
+## 3.1 Data Processing Function
+
+A reusable function named `process_air_quality()` is developed to clean and process one annual air quality dataset.
+
+The function takes two arguments:
+
+- `file_path`: The path to the input CSV file.
+- `ozone_unit`: The desired output unit for ozone concentration. It accepts either `"ppm"` or `"ppb"`, with `"ppm"` as the default.
+
+The function performs the following operations:
+
+1. Reads the CSV file.
+2. Selects the date and three pollutant concentration variables.
+3. Renames the variables using short and informative names.
+4. Converts the date and concentration variables to appropriate data types.
+5. Removes exact duplicate rows.
+6. Sets negative pollutant measurements to zero.
+7. Converts ozone concentrations to the requested unit.
+8. Groups measurements by date and calculates the daily mean for each pollutant.
+
+The output is a clean tibble containing one row per calendar day.
+
+```{r processing}
+process_air_quality <- function(file_path, ozone_unit = "ppm") {
+
+  # Validate the requested ozone unit.
+  ozone_unit <- match.arg(
+    ozone_unit,
+    choices = c("ppm", "ppb")
+  )
+
+  # Read the original CSV file and remove exact duplicate rows.
+  raw_data <- readr::read_csv(
+    file_path,
+    show_col_types = FALSE
+  ) %>%
+    dplyr::distinct()
+
+  # Define the required original column names.
+  required_columns <- c(
+    "Date",
+    "Daily Max 8-hour CO Concentration",
+    "Daily Mean PM2.5 Concentration",
+    "Daily Max 8-hour Ozone Concentration"
+  )
+
+  # Check that all required columns are present.
+  missing_columns <- setdiff(
+    required_columns,
+    names(raw_data)
+  )
+  if (length(missing_columns) > 0) {
+    stop(
+      "The following required columns are missing: ",
+      paste(missing_columns, collapse = ", ")
+    )
+  }
+
+  # Select the required variables and rename them.
+  clean_data <- raw_data %>%
+    dplyr::select(
+      Date,
+      `Daily Max 8-hour CO Concentration`,
+      `Daily Mean PM2.5 Concentration`,
+      `Daily Max 8-hour Ozone Concentration`
+    ) %>%
+    dplyr::rename(
+      date = Date,
+      co = `Daily Max 8-hour CO Concentration`,
+      pm25 = `Daily Mean PM2.5 Concentration`,
+      o3 = `Daily Max 8-hour Ozone Concentration`
+    )
+   # Convert the date variable from character to Date.
+  clean_data <- clean_data %>%
+    dplyr::mutate(
+      date = lubridate::mdy(as.character(date))
+    )
+
+  # Check whether date conversion was successful.
+  if (any(is.na(clean_data$date))) {
+    stop(
+      "Some dates could not be converted. ",
+      "Please check the original date format."
+    )}
+# Convert pollutant measurements to numeric values.
+  # parse_number() also handles numeric values stored as character strings.
+  pollutant_vars <- c("co", "pm25", "o3")
+
+  clean_data <- clean_data %>%
+    dplyr::mutate(
+      dplyr::across(
+        dplyr::all_of(pollutant_vars),
+        ~ readr::parse_number(as.character(.x))
+      )
+    )
+  # Replace negative measurements with zero.
+  # Missing values are retained as NA.
+  for (variable in pollutant_vars) {
+
+    clean_data[[variable]][
+      !is.na(clean_data[[variable]]) &
+        clean_data[[variable]] < 0
+    ] <- 0
+
+  }
+  # Convert ozone concentrations to the requested unit.
+  # The original ozone measurements are assumed to be in ppm.
+  if (ozone_unit == "ppb") {
+
+    clean_data <- clean_data %>%
+      dplyr::mutate(
+        o3 = o3 * 1000
+      )
+
+  }
+  # Calculate daily average concentrations.
+  # Multiple distinct measurements on the same date are averaged.
+  # Dates with only missing measurements remain NA.
+  clean_data <- clean_data %>%
+    dplyr::group_by(date) %>%
+    dplyr::summarise(
+      dplyr::across(
+        dplyr::all_of(pollutant_vars),
+        ~ if (all(is.na(.x))) {
+          NA_real_
+        } else {
+          mean(.x, na.rm = TRUE)
+        }
+      ),
+      .groups = "drop"
+    ) %>%
+    dplyr::mutate(
+      year = lubridate::year(date)
+    ) %>%
+    dplyr::arrange(date) %>%
+    dplyr::select(
+      date,
+      year,
+      co,
+      pm25,
+      o3
+    )
+
+  # Return the processed dataset.
+  return(clean_data)
+}
+```
+
+## 3.2 Considerations Regarding the Order of Data Processing
+
+The order of data processing can affect the final results.
+
+First, exact duplicate rows are removed before daily aggregation to avoid counting identical records more than once. However, distinct measurements recorded on the same date are retained because they may represent valid observations.
+
+Second, negative measurements are replaced with zero before calculating daily averages. If negative values were averaged first, they could artificially decrease the resulting daily concentrations.
+
+Third, ozone unit conversion is performed before daily aggregation. Because the conversion from ppm to ppb is a linear multiplication by 1,000, converting before or after averaging produces the same numerical result, provided that all measurements use the same original unit.
+
+Finally, measurements are grouped by date to obtain one daily average for each pollutant.
+
+## 3.3 Process Each Annual Dataset
+
+The processing function is applied separately to the 2018, 2019, and 2020 datasets.
+
+Ozone concentrations are retained in ppm throughout the primary analysis.
+
+```{r annual_data}
+# Process each annual dataset using the same function.
+air_2018 <- process_air_quality(
+  file_path = file_2018,
+  ozone_unit = "ppm"
+)
+
+air_2019 <- process_air_quality(
+  file_path = file_2019,
+  ozone_unit = "ppm"
+)
+
+air_2020 <- process_air_quality(
+  file_path = file_2020,
+  ozone_unit = "ppm"
+)
+
+# Combine the three processed datasets.
+air_quality <- dplyr::bind_rows(
+  air_2018,
+  air_2019,
+  air_2020
+) %>%
+  dplyr::arrange(date)
+
+# Check that the three datasets contain the expected years.
+if (!all(c(2018, 2019, 2020) %in% unique(air_quality$year))) {
+  stop("One or more expected years are missing from the processed data.")
+}
+
+# Inspect the combined dataset.
+dplyr::glimpse(air_quality)
+```
+
+## 3.4 Check the Processed Data
+
+Several checks are performed to verify that the data processing was successful.
+
+These checks include:
+
+- Confirming that each date appears only once.
+- Confirming that all negative measurements have been removed.
+- Checking the number of observations available for each year.
+- Examining missing values in each pollutant variable.
+
+```{r quality_checks}
+# Check the number of observations by year.
+yearly_counts <- air_quality %>%
+  dplyr::count(year, name = "Number of daily observations")
+
+knitr::kable(
+  yearly_counts,
+  format = "pandoc",
+  caption = "Number of Processed Daily Observations by Year",
+  col.names = c("Year", "Number of Daily Observations"),
+  align = "lcc"
+)
+
+# Check for duplicate dates.
+duplicate_dates <- air_quality %>%
+  dplyr::count(date) %>%
+  dplyr::filter(n > 1)
+
+# Check for negative pollutant concentrations.
+negative_values <- air_quality %>%
+  dplyr::summarise(
+    dplyr::across(
+      c(co, pm25, o3),
+      ~ sum(.x < 0, na.rm = TRUE)
+    )
+  )
+
+
+# Check the number of missing measurements.
+missing_values <- air_quality %>%
+  dplyr::summarise(
+    dplyr::across(
+      c(co, pm25, o3),
+      ~ sum(is.na(.x))
+    )
+  )
+
+# Display the quality-check results.
+cat(
+  "Number of dates with duplicate daily records:",
+  nrow(duplicate_dates),
+  "\n"
+)
+# No duplicates
+
+cat("\nNumber of negative measurements after processing:\n")
+print(negative_values)
+# No negative
+
+cat("\nNumber of missing measurements and the dates with at least one missing(descend with n_missing):\n")
+print(missing_values)
+# List dates with at least one missing pollutant value
+pollutants <- c("co", "pm25", "o3")
+missing_dates <- air_quality %>%
+  filter(if_any(all_of(pollutants), is.na)) %>%
+  mutate(
+    n_missing = rowSums(is.na(
+      select(., all_of(pollutants))
+    ))
+  ) %>%
+  arrange(desc(n_missing), date)
+missing_dates
+# no dates on which all three pollutant measurements are missing. Retain these observations and exclude missing values from the calculations when computing summary statistics with na.rm = TRUE
+
+# Stop if duplicate dates or negative measurements remain.
+stopifnot(nrow(duplicate_dates) == 0)
+stopifnot(all(unlist(negative_values) == 0))
+
+# Check the temporal coverage of the 2020 dataset.
+range_2020 <- range(
+  air_2020$date,
+  na.rm = TRUE
+)
+
+cat(
+  "\n2020 data coverage:",
+  as.character(range_2020[1]),
+  "to",
+  as.character(range_2020[2]),
+  "\n"
+)
+```
+
+The quality checks help ensure that the resulting dataset has one observation per date and that negative measurements have been handled appropriately.
+
+# 4. Descriptive Statistics Tables
+
+## 4.1 Summary Statistics by Year
+
+For each year, the minimum and maximum daily concentrations are calculated for CO, PM2.5, and O3.
+
+The statistics are calculated using the processed daily dataset rather than the original raw measurements.
+
+The pollutant concentrations are reported in the following units:
+
+- CO: ppm.
+- PM2.5: µg/m³.
+- O3: ppm.
+
+All reported values are rounded to three decimal places.
+
+```{r table_summary}
+create_summary_table <- function(data, selected_year) {
+
+  # Define pollutant names and corresponding measurement units.
+  pollutant_labels <- c(
+    co = "Carbon monoxide (CO)",
+    pm25 = "Fine particulate matter (PM2.5)",
+    o3 = "Ozone (O3)"
+  )
+
+  pollutant_units <- c(
+    co = "ppm",
+    pm25 = "µg/m³",
+    o3 = "ppm"
+  )
+
+  # Calculate minimum and maximum daily concentrations.
+  summary_data <- data %>%
+    dplyr::filter(year == selected_year) %>%
+    dplyr::summarise(
+      dplyr::across(
+        c(co, pm25, o3),
+        list(
+          Minimum = ~ if (all(is.na(.x))) NA_real_
+                     else min(.x, na.rm = TRUE),
+          Maximum = ~ if (all(is.na(.x))) NA_real_
+                     else max(.x, na.rm = TRUE)
+        )
+      )
+    ) %>%
+    tidyr::pivot_longer(
+      cols = dplyr::everything(),
+      names_to = c("pollutant", ".value"),
+      names_pattern = "(co|pm25|o3)_(Minimum|Maximum)"
+    ) %>%
+    dplyr::mutate(
+      Pollutant = unname(pollutant_labels[pollutant]),
+      Unit = unname(pollutant_units[pollutant])
+    ) %>%
+    dplyr::select(
+      Pollutant,
+      Unit,
+      Minimum,
+      Maximum
+    ) %>%
+    dplyr::mutate(
+      dplyr::across(
+        c(Minimum, Maximum),
+        ~ round(.x, 3)
+      )
+    )
+
+  return(summary_data)
+}
+```
+
+## 4.2 Results for 2018
+
+```{r table2018}
+table_2018 <- create_summary_table(
+  air_quality,
+  selected_year = 2018
+)
+
+knitr::kable(
+  table_2018,
+  caption = "Table 1. Minimum and Maximum Daily Air Pollutant Concentrations, 2018",
+  col.names = c(
+    "Pollutant",
+    "Unit",
+    "Minimum",
+    "Maximum"
+  ),
+  align = "lcc",
+  digits = 3,
+  format = "pandoc"
+)
+```
+
+## 4.3 Results for 2019
+
+```{r table2019}
+table_2019 <- create_summary_table(
+  air_quality,
+  selected_year = 2019
+)
+
+knitr::kable(
+  table_2019,
+  caption = "Table 2. Minimum and Maximum Daily Air Pollutant Concentrations, 2019",
+  col.names = c(
+    "Pollutant",
+    "Unit",
+    "Minimum",
+    "Maximum"
+  ),
+  align = "lcc",
+  digits = 3,
+  format = "pandoc"
+) 
+```
+
+## 4.4 Results for 2020
+
+```{r table2020}
+table_2020 <- create_summary_table(
+  air_quality,
+  selected_year = 2020
+)
+
+knitr::kable(
+  table_2020,
+  caption = "Table 3. Minimum and Maximum Daily Air Pollutant Concentrations, 2020",
+  col.names = c(
+    "Pollutant",
+    "Unit",
+    "Minimum",
+    "Maximum"
+  ),
+  align = "lcc",
+  digits = 3,
+  format = "pandoc"
+) 
+```
+
+# 5. Exploratory Data Analysis
+
+## 5.1 Plot 1: Monthly Patterns in CO and O3
+
+The first plot examines the monthly patterns of carbon monoxide (CO) and ozone (O3) concentrations across the three study years.
+
+For each calendar month, all available daily observations from 2018, 2019, and 2020 are pooled together.
+
+For example, the January estimate includes all available January daily observations from the three years.
+
+The monthly mean and 95% confidence interval are calculated as:
+
+\[
+\bar{x} \pm 1.96 \times \frac{s}{\sqrt{n}}
+\]
+
+where:
+
+- \(\bar{x}\) is the mean daily concentration for the calendar month.
+- \(s\) is the standard deviation of daily concentrations for that month.
+- \(n\) is the number of non-missing daily measurements for that month.
+
+Because the 2020 dataset only includes January through April, these four months contain observations from three years, whereas May through December contain observations from two years.
+
+### 5.1.1 Calculate Monthly Means and Confidence Intervals
+
+```{r co-o3_summary}
+# Convert daily data into long format for monthly summaries.
+co_o3_long <- air_quality %>%
+  dplyr::mutate(
+    month = factor(
+      lubridate::month(date),
+      levels = 1:12,
+      labels = month_levels
+    )
+  ) %>%
+  tidyr::pivot_longer(
+    cols = c(co, o3),
+    names_to = "pollutant",
+    values_to = "concentration"
+  ) %>%
+  dplyr::mutate(
+    pollutant = dplyr::recode(
+      pollutant,
+      co = "CO",
+      o3 = "O3"
+    )
+  )
+
+# Calculate monthly means, standard deviations, sample sizes,
+# and 95% confidence intervals.
+monthly_co_o3 <- co_o3_long %>%
+  dplyr::group_by(month, pollutant) %>%
+  dplyr::summarise(
+    n = sum(!is.na(concentration)),
+    mean_concentration = if (
+      sum(!is.na(concentration)) == 0
+    ) {
+      NA_real_
+    } else {
+      mean(concentration, na.rm = TRUE)
+    },
+    sd_concentration = if (
+      sum(!is.na(concentration)) > 1
+    ) {
+      sd(concentration, na.rm = TRUE)
+    } else {
+      NA_real_
+    },
+    .groups = "drop"
+  ) %>%
+  dplyr::mutate(
+    se = sd_concentration / sqrt(n),
+    lower_ci = mean_concentration - 1.96 * se,
+    upper_ci = mean_concentration + 1.96 * se
+  )
+
+# Display the monthly summary data.
+monthly_co_o3
+```
+
+### 5.1.2 Visualize Monthly CO and O3 Concentrations
+
+CO and O3 have substantially different concentration scales. To avoid one pollutant dominating the visual presentation, the two pollutants are displayed in separate panels with independent y-axis scales.
+
+Different colors are used to distinguish the pollutants. Points represent monthly mean concentrations, while vertical error bars represent the corresponding 95% confidence intervals.
+
+```{r plot_co-o3}
+# Create the monthly CO and O3 plot.
+plot_co_o3 <- ggplot(
+  monthly_co_o3,
+  aes(
+    x = month,
+    y = mean_concentration,
+    color = pollutant,
+    group = pollutant
+  )
+) +
+  geom_errorbar(
+    aes(
+      ymin = lower_ci,
+      ymax = upper_ci
+    ),
+    width = 0.15,
+    linewidth = 0.6,
+    na.rm = TRUE
+  ) +
+  geom_point(
+    size = 2.8,
+    na.rm = TRUE
+  ) +
+  geom_line(
+    linewidth = 0.7,
+    na.rm = TRUE
+  ) +
+  facet_wrap(
+    ~ pollutant,
+    scales = "free_y",
+    ncol = 1
+  ) +
+  scale_color_manual(
+    values = c(
+      "CO" = "#2878B5",
+      "O3" = "#D95F02"
+    )
+  ) +
+  scale_x_discrete(
+    limits = month_levels,
+    drop = FALSE
+  ) +
+  labs(
+    title = "Monthly Patterns in CO and O3 Concentrations",
+    subtitle = paste(
+      "Monthly means and 95% confidence intervals",
+      "based on pooled daily observations from 2018-2020"
+    ),
+    x = "Calendar Month",
+    y = "Mean Daily Concentration",
+    color = "Pollutant",
+    caption = paste(
+      "Note: January-April include observations from three years;",
+      "May-December include observations from two years."
+    )
+  ) +
+  theme(
+    legend.position = "none",
+    strip.background = element_rect(
+      fill = "gray95",
+      color = NA
+    )
+  )
+
+plot_co_o3
+```
+
+**Explanation of the plotting choice:**
+
+CO and O3 are displayed in separate panels with independent y-axis scales because their concentration magnitudes differ substantially. This approach preserves the original measurement units while allowing the monthly patterns of both pollutants to be clearly observed without introducing a potentially misleading dual-axis transformation.
+
+## 5.2 Plot 2: Monthly Patterns in PM2.5 by Year
+
+The second plot examines the monthly distribution of daily PM2.5 concentrations separately for each year.
+
+Boxplots are used to display the distribution of daily measurements within each month and year.
+
+Each boxplot summarizes:
+
+- The median daily concentration.
+- The interquartile range (IQR).
+- The distribution of observations and potential outliers.
+
+Different colors represent different years.
+
+This approach allows comparisons of both monthly distributions and differences between years.
+
+### 5.2.1 Prepare Monthly PM2.5 Data
+
+```{r pm25}
+# Add calendar month labels to the daily PM2.5 dataset.
+pm25_data <- air_quality %>%
+  dplyr::mutate(
+    month = factor(
+      lubridate::month(date),
+      levels = 1:12,
+      labels = month_levels
+    ),
+    year = factor(
+      year,
+      levels = c(2018, 2019, 2020)
+    )
+  )
+
+# Inspect the number of non-missing measurements by month and year.
+pm25_monthly_counts <- pm25_data %>%
+  dplyr::group_by(year, month) %>%
+  dplyr::summarise(
+    n = sum(!is.na(pm25)),
+    .groups = "drop"
+  )
+
+pm25_monthly_counts
+```
+
+### 5.2.2 Visualize PM2.5 Concentrations
+
+```{r plot_pm25}
+# Create boxplots of daily PM2.5 concentrations by month and year.
+plot_pm25 <- ggplot(
+  pm25_data,
+  aes(
+    x = month,
+    y = pm25,
+    fill = year
+  )
+) +
+  geom_boxplot(
+    position = position_dodge(width = 0.8),
+    width = 0.7,
+    outlier.size = 0.8,
+    outlier.alpha = 0.35,
+    alpha = 0.85,
+    na.rm = TRUE
+  ) +
+  scale_fill_manual(
+    values = c(
+      "2018" = "#4C78A8",
+      "2019" = "#F2A541",
+      "2020" = "#59A14F"
+    )
+  ) +
+  scale_x_discrete(
+    limits = month_levels,
+    drop = FALSE
+  ) +
+  labs(
+    title = "Monthly Distribution of PM2.5 Concentrations by Year",
+    subtitle = "Daily PM2.5 measurements grouped by calendar month and year",
+    x = "Calendar Month",
+    y = expression("Daily PM2.5 Concentration ("*mu*"g/m"^3*")"),
+    fill = "Year",
+    caption = paste(
+      "Note: The 2020 dataset includes observations only through April.",
+      "Boxes represent the interquartile range; center lines represent medians."
+    )
+  ) +
+  theme(
+    legend.position = "bottom"
+  )
+
+plot_pm25
+```
+
+**Justification of the geom choice:**
+
+Boxplots are used because they display the median, interquartile range, and potential outliers of daily PM2.5 measurements, allowing the monthly distributions and between-year differences to be compared more effectively than a plot of monthly means alone.
+
+# 6. Results
+
+**Key observations:**
+
+1. Distinct seasonal patterns in CO and O3: CO concentrations are relatively high during winter, decrease toward late spring and summer, and increase again toward the end of the year. In contrast, O3 concentrations increase from winter to early summer, peak in June, and then decline toward winter.
+
+2. Year-to-year variation in PM2.5: Monthly PM2.5 distributions vary across years. The 2020 median concentrations are relatively low in January and February, while the annual maximum daily concentration in 2020 (31.200 µg/m³) is notably higher than those in 2018 (20.400 µg/m³) and 2019 (21.300 µg/m³).
+
+3. Unequal data availability: The analysis includes observations from all three years for January through April, but only from 2018 and 2019 for May through December. Missing measurements were retained as NA and excluded from the corresponding calculations. Therefore, differences in data availability should be considered when interpreting monthly and year-to-year patterns.
+
+4. Different temporal behaviors across pollutants: CO, O3, and PM2.5 exhibit different patterns of monthly variation, highlighting the importance of examining multiple pollutants rather than relying on a single indicator to characterize air quality.
+
+**Interpretation:**
+
+1. Seasonal patterns in CO and O3: CO concentrations are relatively high in winter, decrease toward late spring and summer, and increase again toward the end of the year. In contrast, O3 concentrations rise from winter to early summer, peak in June, and then decline.
+
+2. Differences in PM2.5 distributions across years: PM2.5 median concentrations in 2020 are lower in January and February than in 2018 and 2019, while differences in March and April are less consistent. However, the maximum daily PM2.5 concentration in 2020 (31.2 µg/m³) is higher than those in 2018 (20.4 µg/m³) and 2019 (21.3 µg/m³), indicating an unusually high observation.
+
+3. Considerations regarding data availability: Data for all three years are available from January through April, whereas May through December include only 2018 and 2019. Missing measurements were retained as NA and excluded from the corresponding calculations, so the number of available observations varies across pollutants and months.
+
+4. Differences across pollutants: CO, O3, and PM2.5 show different temporal patterns across the study period. These descriptive results suggest pollutant-specific seasonal variation but do not establish correlations or causal relationships between pollutants.
+
+# 7. Conclusion
+
+This project developed a reusable data-processing function to clean daily air quality measurements from the EPA monitoring station at RDU airport. After removing exact duplicate observations, correcting negative measurements, standardizing ozone units, and aggregating multiple measurements by date, the three annual datasets were combined into a single daily dataset.
+
+Descriptive statistics and graphical summaries were then used to examine the distributions and monthly patterns of CO, PM2.5, and O3 from 2018 through April 2020.
+
+These exploratory analyses provide an overview of temporal variation in air pollutant concentrations and may help inform future investigations of environmental exposures and SCD-related healthcare utilization.
+
+# 8. AI Use Statement
+
+AI tools were used to assist with organizing the analysis workflow, reviewing, refining, and debugging R code, and improving the clarity of the project documentation. I take full responsibility for all code and analytical outputs submitted. The data-processing steps, variable transformations, summary statistics, and visualizations were checked against the assignment requirements and the original datasets.
