@@ -71,6 +71,8 @@ Yuyao_Lei_Project2(branch)
 │
 ├── project2.Rmd
 │
+├── project2.docx
+│
 ├── README.md
 │
 └── .gitignore
@@ -82,6 +84,7 @@ Yuyao_Lei_Project2(branch)
 |---|---|
 | `data/` | Contains the three original annual air quality CSV files. |
 | `project2.Rmd` | Main analysis document containing data import, data cleaning, the processing function, descriptive statistics, plots, and interpretation. |
+| `project2.docx` | The word document output of `project2.Rmd`. |
 | `README.md` | Provides project documentation and instructions for reproducing the analysis. |
 | `R_airquality_SCD.Rproj` | RStudio project file. |
 
